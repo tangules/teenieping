@@ -120,16 +120,28 @@ function playSound(type) {
   } catch (e) {}
 }
 
-let currentAudio = null;
+// ---- 음성 재생 ----
+// 하나의 오디오 플레이어를 계속 재사용합니다.
+//  - 음성이 겹치거나 메아리처럼 두 번 나오지 않게 하고,
+//  - 아이폰에서 처음 한 번 터치로 허용된 플레이어를 이후 자동 음성에도 쓸 수 있게 합니다.
+// voiceToken: 새 음성을 틀 때마다 1씩 올라가며, 이미 끊긴 이전 음성의 뒤늦은 실패 알림을 무시하는 데 씁니다.
+const voicePlayer = new Audio();
+voicePlayer.preload = 'auto';
+let voiceToken = 0;
+let voiceRequest = null; // { token, fallbackText, fellBack }
+
+voicePlayer.addEventListener('error', () => {
+  // 파일을 실제로 못 불러온 경우(파일 없음·네트워크 끊김)에만 브라우저 기본 음성으로 대신 읽기
+  const req = voiceRequest;
+  if (!req || req.token !== voiceToken || req.fellBack) return;
+  req.fellBack = true;
+  fallbackSpeak(req.fallbackText);
+});
 
 function stopCurrentVoice() {
-  if (currentAudio) {
-    try {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
-    } catch (e) {}
-    currentAudio = null;
-  }
+  voiceToken++;
+  voiceRequest = null;
+  try { voicePlayer.pause(); } catch (e) {}
   if ('speechSynthesis' in window) {
     try { window.speechSynthesis.cancel(); } catch (e) {}
   }
@@ -150,13 +162,23 @@ function fallbackSpeak(text) {
 function playVoiceFile(relPath, fallbackText, force = false) {
   if (!ttsEnabled && !force) return;
   stopCurrentVoice();
+  const req = { token: voiceToken, fallbackText, fellBack: false };
+  voiceRequest = req;
   try {
-    const audio = new Audio(relPath);
-    currentAudio = audio;
-    audio.onerror = () => fallbackSpeak(fallbackText);
-    audio.play().catch(() => fallbackSpeak(fallbackText));
+    voicePlayer.src = relPath;
+    voicePlayer.play().catch(err => {
+      // AbortError: 다음 음성이 앞 음성을 끊은 것(정상) → 아무것도 안 함 (예전엔 여기서 가는 목소리로 한 번 더 읽음)
+      // NotAllowedError: 브라우저가 자동재생을 막은 것 → 다른 목소리로 대신 읽지 않음
+      if (req.token !== voiceToken || req.fellBack) return;
+      if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError')) return;
+      req.fellBack = true;
+      fallbackSpeak(fallbackText);
+    });
   } catch (e) {
-    fallbackSpeak(fallbackText);
+    if (!req.fellBack) {
+      req.fellBack = true;
+      fallbackSpeak(fallbackText);
+    }
   }
 }
 
