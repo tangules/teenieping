@@ -270,8 +270,6 @@ const V = {
   correct: n => ({ path: `audio/correct/${encodeURIComponent(n)}.mp3`, text: `${n}! 정답이에요!` }),
   char: c => ({ path: `audio/chars/${encodeURIComponent(c)}.mp3`, text: c }),
   hint: (n, kw) => ({ path: `audio/hints/${encodeURIComponent(n)}.mp3`, text: `힌트! ${kw}의 티니핑이에요.` }),
-  thisIs: () => ({ path: 'audio/common/this_is.mp3', text: '이건' }),
-  findChar: () => ({ path: 'audio/common/find_char.mp3', text: '찾는 글자는' }),
   jamo: j => ({ path: `audio/jamo/${encodeURIComponent(j)}.mp3`, text: JAMO_SPOKEN[j] || j }),
   caught: () => ({ path: 'audio/common/catch.mp3', text: '와! 한 번에 맞혔어요! 티니핑 캐치!' }),
   almost: () => ({ path: 'audio/common/almost.mp3', text: '잘했어요! 다음엔 한 번에 캐치해 보자!' })
@@ -548,7 +546,7 @@ function renderQuestion() {
 
   document.getElementById('feedback-msg').innerHTML = readAloudHelp
     ? '한 번 누르면 읽어주고, 두 번 누르면 정답 선택!'
-    : `🔊 <strong>소리를 잘 듣고</strong> 이름을 찾아 눌러요!`;
+    : `👀 <strong>그림을 보고</strong> 이름을 찾아 눌러요!`;
   document.getElementById('next-btn').classList.remove('show');
 
   const otherCandidates = pool.filter(item => item.name !== q.name);
@@ -576,11 +574,11 @@ function renderQuestion() {
     grid.appendChild(btn);
   });
 
-  // 문제를 소리로 내기: "○○핑을 찾아봐!" → 아이는 글자를 보고 찾아야 함
-  playVoiceSequence([V.prompt(q.name)]);
+  // 문제 시작 때는 아무 음성도 내지 않음 (이름을 미리 알려주지 않고 그림과 글자만 보고 찾게)
+  stopCurrentVoice();
 }
 
-// 🔊 다시듣기: 지금 단계에 맞는 문제 소리를 다시 들려줌
+// 🔊 정답듣기(직접 눌렀을 때만): 1단계는 "○○핑을 찾아봐!", 2단계는 지금 만들 글자 소리
 function speakCurrentAnswer() {
   const q = questions[currentIndex];
   if (answeredCurrent && puzzleTargetIndex !== -1 && puzzleSlots[puzzleTargetIndex]) {
@@ -632,10 +630,10 @@ function handleChoice(btnEl, selectedOpt, correctOpt) {
     btnEl.classList.add('wrong');
     btnEl.disabled = true;
     playSound('wrong');
-    playVoiceSequence([V.thisIs(), V.name(selectedOpt.name), V.prompt(correctOpt.name)]);
+    playVoiceSequence([V.name(selectedOpt.name), V.prompt(correctOpt.name)]);
     lockInput(WRONG_LOCK_MS);
     document.getElementById('feedback-msg').innerHTML =
-      `🙅 이건 <strong>${selectedOpt.name}</strong>이에요. 다시 듣고 찾아봐요!`;
+      `🙅 <strong>${selectedOpt.name}</strong>이에요. 다시 찾아봐요!`;
   }
 }
 
@@ -817,10 +815,10 @@ function handleJamoCardClick(btnEl, clickedJamo, correctOpt) {
     btnEl.classList.remove('reject-shake');
     void btnEl.offsetWidth;
     btnEl.classList.add('reject-shake');
-    playVoiceSequence([V.thisIs(), V.jamo(clickedJamo)]);
+    playVoiceSequence([V.jamo(clickedJamo)]);
     lockInput(CARD_LOCK_MS);
     document.getElementById('feedback-msg').innerHTML =
-      `🙅 이건 <strong>'${clickedJamo}'</strong> ${JAMO_SPOKEN[clickedJamo] || ''}! <strong>'${target.char}'</strong> 글자를 잘 보고 찾아봐요!`;
+      `🙅 <strong>'${clickedJamo}'</strong> ${JAMO_SPOKEN[clickedJamo] || ''}! <strong>'${target.char}'</strong> 글자를 잘 보고 찾아봐요!`;
   }
 }
 
