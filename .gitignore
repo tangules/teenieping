@@ -1,0 +1,14 @@
+# Excel이 파일을 열 때 만드는 임시 잠금 파일
+~$*
+
+# 원본 고화질 이미지 (용량이 커서 로컬 보관만, 게임은 image/의 WebP 사용)
+image_original/
+
+# Python 캐시
+__pycache__/
+*.pyc
+
+# OS 부산물
+Thumbs.db
+desktop.ini
+.DS_Store

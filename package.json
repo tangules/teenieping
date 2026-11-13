@@ -1,0 +1,11 @@
+{
+  "name": "teenieping",
+  "version": "1.0.0",
+  "description": "Catch! Teenieping Hangul Learning Game & High-Res Image Collector",
+  "main": "index.html",
+  "scripts": {
+    "download": "python scripts/download_teenieping_images.py",
+    "optimize": "python scripts/optimize_images.py",
+    "voices": "python scripts/generate_cute_voices.py"
+  }
+}
