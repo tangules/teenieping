@@ -625,12 +625,12 @@ function handleChoice(btnEl, selectedOpt, correctOpt) {
     // 1단계 정답 맞힘 -> 2단계 한글 글자 카드 순서대로 맞추기 시작! (이름을 읽어준 뒤 첫 글자 소리)
     startSyllablePuzzle(correctOpt, [V.name(correctOpt.name)]);  // 이름을 읽어준 뒤 자모 맞추기 시작
   } else {
-    // 틀렸을 때: 누른 것과 정답을 비교해서 들려주고, 잠깐 쉬었다가 다시 고르게 함
+    // 틀렸을 때: 누른 이름만 들려주고, 잠깐 쉬었다가 다시 고르게 함
     mistakes.name++;
     btnEl.classList.add('wrong');
     btnEl.disabled = true;
     playSound('wrong');
-    playVoiceSequence([V.name(selectedOpt.name), V.prompt(correctOpt.name)]);
+    playVoiceSequence([V.name(selectedOpt.name)]); // 누른 이름만 알려주고 정답 이름은 말하지 않음
     lockInput(WRONG_LOCK_MS);
     document.getElementById('feedback-msg').innerHTML =
       `🙅 <strong>${selectedOpt.name}</strong>이에요. 다시 찾아봐요!`;
