@@ -18,6 +18,16 @@ let learnedList = [];
 let autoNextTimer = null;
 let countdownInterval = null;
 let celebrateTimer = null;
+let lockTimer = null;          // 틀린 뒤 잠깐 버튼을 못 누르게 하는 타이머 (막 누르기 방지)
+let readAloudHelp = false;     // true면 예전 방식: 버튼 한 번 누르면 읽어주고, 두 번 누르면 제출
+let mistakes = { name: 0, letters: 0 }; // 이번 문제에서 틀린 횟수 (캐치 여부 판단)
+
+// 캐치 조건: 이름은 한 번에 맞히고, 글자 퍼즐은 실수 1번까지 봐줌
+const CATCH_MAX_NAME_MISTAKES = 0;
+const CATCH_MAX_LETTER_MISTAKES = 1;
+const WRONG_LOCK_MS = 2000;    // 1단계 이름 틀렸을 때 잠금 시간
+const CARD_LOCK_MS = 1200;     // 2단계 글자 카드 틀렸을 때 잠금 시간
+const AUTO_NEXT_SEC = 6;
 
 // 2단계 글자 맞추기 퍼즐 상태
 let puzzleSlots = [];       // [{ char: '꼼', fixed: false, filled: false }, { char: '딱', ... }, { char: '핑', fixed: true, filled: true }]
@@ -36,6 +46,27 @@ function clearAutoNextTimers() {
     clearTimeout(celebrateTimer);
     celebrateTimer = null;
   }
+  unlockInput();
+}
+
+// ---- 틀린 뒤 잠깐 잠그기: 아무 버튼이나 연달아 누르는 것을 막고, 안내 음성을 끝까지 듣게 함 ----
+function lockInput(ms) {
+  unlockInput();
+  document.getElementById('choices-grid').classList.add('locked');
+  lockTimer = setTimeout(unlockInput, ms);
+}
+
+function unlockInput() {
+  if (lockTimer) {
+    clearTimeout(lockTimer);
+    lockTimer = null;
+  }
+  const grid = document.getElementById('choices-grid');
+  if (grid) grid.classList.remove('locked');
+}
+
+function isInputLocked() {
+  return lockTimer !== null;
 }
 
 function initDecor() {
@@ -125,18 +156,31 @@ function playSound(type) {
 //  - 음성이 겹치거나 메아리처럼 두 번 나오지 않게 하고,
 //  - 아이폰에서 처음 한 번 터치로 허용된 플레이어를 이후 자동 음성에도 쓸 수 있게 합니다.
 // voiceToken: 새 음성을 틀 때마다 1씩 올라가며, 이미 끊긴 이전 음성의 뒤늦은 실패 알림을 무시하는 데 씁니다.
+// 여러 음성을 차례로 이어서 틀 수도 있습니다 (예: "이건" → "토이핑" → "하츄핑을 찾아봐!").
 const voicePlayer = new Audio();
 voicePlayer.preload = 'auto';
 let voiceToken = 0;
-let voiceRequest = null; // { token, fallbackText, fellBack }
+let voiceRequest = null; // { token, fallbackText, fellBack, rest: [다음에 이어서 틀 음성들] }
 
 voicePlayer.addEventListener('error', () => {
   // 파일을 실제로 못 불러온 경우(파일 없음·네트워크 끊김)에만 브라우저 기본 음성으로 대신 읽기
   const req = voiceRequest;
   if (!req || req.token !== voiceToken || req.fellBack) return;
   req.fellBack = true;
-  fallbackSpeak(req.fallbackText);
+  fallbackSpeak(req.fallbackText, () => playNextInSequence(req));
 });
+
+voicePlayer.addEventListener('ended', () => {
+  const req = voiceRequest;
+  if (req && req.token === voiceToken) playNextInSequence(req);
+});
+
+function playNextInSequence(req) {
+  if (req.token !== voiceToken || !req.rest || req.rest.length === 0) return;
+  const [next, ...rest] = req.rest;
+  voiceToken++;
+  startVoiceItem(next, rest);
+}
 
 function stopCurrentVoice() {
   voiceToken++;
@@ -147,7 +191,7 @@ function stopCurrentVoice() {
   }
 }
 
-function fallbackSpeak(text) {
+function fallbackSpeak(text, onEnd) {
   if (!('speechSynthesis' in window)) return;
   try {
     window.speechSynthesis.cancel();
@@ -155,59 +199,69 @@ function fallbackSpeak(text) {
     utter.lang = 'ko-KR';
     utter.rate = 1.05;
     utter.pitch = 1.65;
+    if (onEnd) utter.onend = onEnd;
     window.speechSynthesis.speak(utter);
   } catch (e) {}
 }
 
-function playVoiceFile(relPath, fallbackText, force = false) {
-  if (!ttsEnabled && !force) return;
-  stopCurrentVoice();
-  const req = { token: voiceToken, fallbackText, fellBack: false };
+function startVoiceItem(item, rest) {
+  const req = { token: voiceToken, fallbackText: item.text, fellBack: false, rest };
   voiceRequest = req;
+  const fallBack = () => {
+    if (req.fellBack) return;
+    req.fellBack = true;
+    fallbackSpeak(item.text, () => playNextInSequence(req));
+  };
   try {
-    voicePlayer.src = relPath;
+    voicePlayer.src = item.path;
     voicePlayer.play().catch(err => {
       // AbortError: 다음 음성이 앞 음성을 끊은 것(정상) → 아무것도 안 함 (예전엔 여기서 가는 목소리로 한 번 더 읽음)
       // NotAllowedError: 브라우저가 자동재생을 막은 것 → 다른 목소리로 대신 읽지 않음
-      if (req.token !== voiceToken || req.fellBack) return;
+      if (req.token !== voiceToken) return;
       if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError')) return;
-      req.fellBack = true;
-      fallbackSpeak(fallbackText);
+      fallBack();
     });
   } catch (e) {
-    if (!req.fellBack) {
-      req.fellBack = true;
-      fallbackSpeak(fallbackText);
-    }
+    fallBack();
   }
 }
 
-function speakName(name, force = false) {
-  playVoiceFile(`audio/names/${encodeURIComponent(name)}.mp3`, name, force);
+// items: [{ path, text }, ...] 차례로 재생. force=true면 목소리 꺼짐이어도 재생(🔊 버튼을 직접 누른 경우)
+function playVoiceSequence(items, force = false) {
+  if (!ttsEnabled && !force) return;
+  if (!items || items.length === 0) return;
+  stopCurrentVoice();
+  const [first, ...rest] = items;
+  startVoiceItem(first, rest);
 }
 
-function speakCorrect(name, force = false) {
-  playVoiceFile(`audio/correct/${encodeURIComponent(name)}.mp3`, `${name} 정답이에요`, force);
+function playVoiceFile(relPath, fallbackText, force = false) {
+  playVoiceSequence([{ path: relPath, text: fallbackText }], force);
 }
 
-function speakWrong(force = false) {
-  playVoiceFile(`audio/common/wrong.mp3`, `틀렸습니다!`, force);
-}
+// 음성 조각 만들기
+const V = {
+  name: n => ({ path: `audio/names/${encodeURIComponent(n)}.mp3`, text: n }),
+  prompt: n => ({ path: `audio/prompts/${encodeURIComponent(n)}.mp3`, text: `${n}을 찾아봐!` }),
+  correct: n => ({ path: `audio/correct/${encodeURIComponent(n)}.mp3`, text: `${n}! 정답이에요!` }),
+  char: c => ({ path: `audio/chars/${encodeURIComponent(c)}.mp3`, text: c }),
+  hint: (n, kw) => ({ path: `audio/hints/${encodeURIComponent(n)}.mp3`, text: `힌트! ${kw}의 티니핑이에요.` }),
+  thisIs: () => ({ path: 'audio/common/this_is.mp3', text: '이건' }),
+  findChar: () => ({ path: 'audio/common/find_char.mp3', text: '찾는 글자는' }),
+  caught: () => ({ path: 'audio/common/catch.mp3', text: '와! 한 번에 맞혔어요! 티니핑 캐치!' }),
+  almost: () => ({ path: 'audio/common/almost.mp3', text: '잘했어요! 다음엔 한 번에 캐치해 보자!' })
+};
 
-function speakChar(ch, force = false) {
-  playVoiceFile(`audio/chars/${encodeURIComponent(ch)}.mp3`, ch, force);
-}
-
-function speakHint(name, keyword, force = false) {
-  playVoiceFile(`audio/hints/${encodeURIComponent(name)}.mp3`, `힌트! ${keyword}의 티니핑이에요.`, force);
-}
+function speakName(name, force = false) { playVoiceSequence([V.name(name)], force); }
+function speakChar(ch, force = false) { playVoiceSequence([V.char(ch)], force); }
+function speakHint(name, keyword, force = false) { playVoiceSequence([V.hint(name, keyword)], force); }
 
 // ---- 설정 저장 (문제 수 / 목소리 켜짐) : 다음에 열어도 그대로 유지 ----
 const SETTINGS_KEY = 'teenieping-settings';
 
 function saveSettings() {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ limit: selectedLimit, tts: ttsEnabled }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ limit: selectedLimit, tts: ttsEnabled, readAloud: readAloudHelp }));
   } catch (e) {}
 }
 
@@ -218,6 +272,9 @@ function renderSettings() {
   const btn = document.getElementById('tts-toggle-btn');
   btn.classList.toggle('active', ttsEnabled);
   btn.textContent = ttsEnabled ? '하츄핑 목소리 켜짐 🔊' : '하츄핑 목소리 꺼짐 🔇';
+  const readBtn = document.getElementById('read-aloud-btn');
+  readBtn.classList.toggle('active', readAloudHelp);
+  readBtn.textContent = readAloudHelp ? '버튼 읽어주기 켜짐 🗣️' : '버튼 읽어주기 꺼짐 🔤';
 }
 
 function loadSettings() {
@@ -226,6 +283,7 @@ function loadSettings() {
     if (saved) {
       if ([10, 20, 999].includes(saved.limit)) selectedLimit = saved.limit;
       if (typeof saved.tts === 'boolean') ttsEnabled = saved.tts;
+      if (typeof saved.readAloud === 'boolean') readAloudHelp = saved.readAloud;
     }
   } catch (e) {}
   renderSettings();
@@ -248,6 +306,78 @@ function toggleTTS() {
   }
 }
 
+// 버튼 읽어주기 도움: 글자를 아직 거의 못 읽을 때만 켜는 쉬운 모드 (켜면 예전처럼 한 번 누르면 읽어줌)
+function toggleReadAloud() {
+  readAloudHelp = !readAloudHelp;
+  renderSettings();
+  saveSettings();
+}
+
+// ---- 내 도감: 한 번에 맞혀서 "캐치"한 티니핑 모음 (이 기기에 저장) ----
+const CAUGHT_KEY = 'teenieping-caught';
+let caughtNames = new Set();
+
+function loadCaught() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CAUGHT_KEY) || '[]');
+    if (Array.isArray(saved)) caughtNames = new Set(saved);
+  } catch (e) {}
+  renderCollectionCount();
+}
+
+function saveCaught() {
+  try {
+    localStorage.setItem(CAUGHT_KEY, JSON.stringify([...caughtNames]));
+  } catch (e) {}
+}
+
+function renderCollectionCount() {
+  const el = document.getElementById('collection-count');
+  if (el) el.textContent = `${caughtNames.size}/${TEENIEPINGS.length}`;
+}
+
+function openCollection() {
+  clearAutoNextTimers();
+  stopCurrentVoice();
+  const wrap = document.getElementById('collection-list');
+  wrap.innerHTML = '';
+  document.getElementById('collection-summary').textContent =
+    `${caughtNames.size}마리 캐치! (전체 ${TEENIEPINGS.length}마리)`;
+
+  for (let s = 1; s <= 6; s++) {
+    const members = TEENIEPINGS.filter(t => t.season === s);
+    if (members.length === 0) continue;
+    const got = members.filter(t => caughtNames.has(t.name)).length;
+
+    const title = document.createElement('div');
+    title.className = 'collection-season-title';
+    title.textContent = `${members[0].seasonTitle} · ${got}/${members.length}`;
+    wrap.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.className = 'collection-grid';
+    members.forEach(t => {
+      const caught = caughtNames.has(t.name);
+      const cell = document.createElement('button');
+      cell.className = 'collection-cell' + (caught ? ' caught' : '');
+      cell.innerHTML = `<img src="${t.img}" alt="" loading="lazy" /><span>${caught ? t.name : '???'}</span>`;
+      cell.onclick = () => {
+        if (caught) {
+          speakName(t.name, true);
+        } else {
+          cell.classList.remove('reject-shake');
+          void cell.offsetWidth;
+          cell.classList.add('reject-shake');
+        }
+      };
+      grid.appendChild(cell);
+    });
+    wrap.appendChild(grid);
+  }
+  showScreen('collection-screen');
+  document.getElementById('collection-screen').scrollTop = 0;
+}
+
 // ---- 홈 화면 시즌별 마리 수를 데이터에서 자동 계산 (데이터를 고쳐도 숫자가 맞게) ----
 function renderSeasonCounts() {
   for (let s = 1; s <= 6; s++) {
@@ -267,10 +397,11 @@ function preloadQuestion(q) {
   img.src = q.img;
   const audio = new Audio();
   audio.preload = 'auto';
-  audio.src = `audio/names/${encodeURIComponent(q.name)}.mp3`;
+  audio.src = `audio/prompts/${encodeURIComponent(q.name)}.mp3`;
 }
 
 loadSettings();
+loadCaught();
 renderSeasonCounts();
 
 function shuffle(arr) {
@@ -314,6 +445,7 @@ function restartSameMode() {
 function goHome() {
   clearAutoNextTimers();
   stopCurrentVoice();
+  renderCollectionCount();
   showScreen('home-screen');
 }
 
@@ -321,10 +453,12 @@ function renderQuestion() {
   clearAutoNextTimers();
   answeredCurrent = false;
   selectedChoiceName = null;
+  mistakes = { name: 0, letters: 0 };
   const q = questions[currentIndex];
 
   document.getElementById('progress-pill').textContent = `${currentIndex + 1}/${questions.length}`;
-  document.getElementById('score-pill').textContent = `💖${score}`;
+  document.getElementById('score-pill').textContent = `⭐${score}`;
+  document.getElementById('catch-stamp').className = 'catch-stamp';
   const pct = ((currentIndex) / questions.length) * 100;
   document.getElementById('progress-fill').style.width = `${pct}%`;
 
@@ -345,7 +479,9 @@ function renderQuestion() {
   const learnBox = document.getElementById('syllable-learn-box');
   learnBox.classList.remove('show', 'completed');
 
-  document.getElementById('feedback-msg').textContent = '한 번 누르면 읽어주고, 두 번 누르면 정답 선택!';
+  document.getElementById('feedback-msg').innerHTML = readAloudHelp
+    ? '한 번 누르면 읽어주고, 두 번 누르면 정답 선택!'
+    : `🔊 <strong>소리를 잘 듣고</strong> 이름을 찾아 눌러요!`;
   document.getElementById('next-btn').classList.remove('show');
 
   const otherCandidates = pool.filter(item => item.name !== q.name);
@@ -372,11 +508,19 @@ function renderQuestion() {
     btn.onclick = () => handleChoice(btn, opt, q);
     grid.appendChild(btn);
   });
+
+  // 문제를 소리로 내기: "○○핑을 찾아봐!" → 아이는 글자를 보고 찾아야 함
+  playVoiceSequence([V.prompt(q.name)]);
 }
 
+// 🔊 다시듣기: 지금 단계에 맞는 문제 소리를 다시 들려줌
 function speakCurrentAnswer() {
   const q = questions[currentIndex];
-  speakName(q.name, true);
+  if (answeredCurrent && puzzleTargetIndex !== -1 && puzzleSlots[puzzleTargetIndex]) {
+    speakChar(puzzleSlots[puzzleTargetIndex].char, true);
+  } else {
+    playVoiceSequence([V.prompt(q.name)], true);
+  }
 }
 
 function toggleHint() {
@@ -391,10 +535,10 @@ function toggleHint() {
 }
 
 function handleChoice(btnEl, selectedOpt, correctOpt) {
-  if (answeredCurrent) return;
+  if (answeredCurrent || isInputLocked()) return;
 
-  // 1번째 터치: 소리만 읽어주고 선택 대기 상태로 표시
-  if (selectedChoiceName !== selectedOpt.name) {
+  // (버튼 읽어주기 도움이 켜졌을 때만) 1번째 터치: 소리만 읽어주고 선택 대기 상태로 표시
+  if (readAloudHelp && selectedChoiceName !== selectedOpt.name) {
     selectedChoiceName = selectedOpt.name;
     document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
     btnEl.classList.add('selected');
@@ -404,7 +548,7 @@ function handleChoice(btnEl, selectedOpt, correctOpt) {
     return;
   }
 
-  // 2번째 연속 터치: 정답 제출로 인식!
+  // 제출 (읽어주기 도움이 꺼져 있으면 한 번 누르면 바로 제출)
   btnEl.classList.remove('selected');
   selectedChoiceName = null;
 
@@ -412,22 +556,24 @@ function handleChoice(btnEl, selectedOpt, correctOpt) {
     answeredCurrent = true;
     btnEl.classList.add('correct');
     playSound('correct');
-    speakName(correctOpt.name);
 
-    // 1단계 정답 맞힘 -> 2단계 한글 글자 카드 순서대로 맞추기 시작!
-    startSyllablePuzzle(correctOpt);
+    // 1단계 정답 맞힘 -> 2단계 한글 글자 카드 순서대로 맞추기 시작! (이름을 읽어준 뒤 첫 글자 소리)
+    startSyllablePuzzle(correctOpt, [V.name(correctOpt.name)]);
   } else {
+    // 틀렸을 때: 누른 것과 정답을 비교해서 들려주고, 잠깐 쉬었다가 다시 고르게 함
+    mistakes.name++;
     btnEl.classList.add('wrong');
     btnEl.disabled = true;
     playSound('wrong');
-    speakWrong();
+    playVoiceSequence([V.thisIs(), V.name(selectedOpt.name), V.prompt(correctOpt.name)]);
+    lockInput(WRONG_LOCK_MS);
     document.getElementById('feedback-msg').innerHTML =
-      `❌ <strong>틀렸습니다!</strong> 다른 버튼을 눌러보세요 💕`;
+      `🙅 이건 <strong>${selectedOpt.name}</strong>이에요. 다시 듣고 찾아봐요!`;
   }
 }
 
 // ==================== 2단계: 한글 글자 카드 순서대로 맞추기 퍼즐 ====================
-function startSyllablePuzzle(correctOpt) {
+function startSyllablePuzzle(correctOpt, voicePrefix = []) {
   document.getElementById('hint-box').classList.remove('show');
   document.getElementById('image-stage').classList.add('puzzle-mode');
 
@@ -459,7 +605,7 @@ function startSyllablePuzzle(correctOpt) {
     finishSyllablePuzzle(correctOpt);
   } else {
     renderPuzzleSlots();
-    renderSyllableChoices(correctOpt);
+    renderSyllableChoices(correctOpt, voicePrefix);
   }
 }
 
@@ -501,6 +647,7 @@ function renderPuzzleSlots() {
     } else if (idx === puzzleTargetIndex) {
       el.classList.add('active-target');
       el.textContent = '?';
+      el.onclick = () => speakChar(slot.char, true); // ? 칸을 누르면 찾을 글자 소리를 다시 들려줌
     } else {
       el.textContent = '?';
     }
@@ -509,10 +656,12 @@ function renderPuzzleSlots() {
   });
 }
 
-function renderSyllableChoices(correctOpt) {
+function renderSyllableChoices(correctOpt, voicePrefix = []) {
   const targetChar = puzzleSlots[puzzleTargetIndex].char;
+  // 찾을 글자를 화면에 써 주지 않고 소리로만 알려줌 (글자 모양만 보고 똑같은 걸 고르지 않도록)
   document.getElementById('feedback-msg').innerHTML =
-    `🧩 빈칸에 들어갈 <strong>"${targetChar}"</strong> 글자 카드를 찾아 눌러보세요!`;
+    `🧩 소리를 듣고 <strong>빈칸 글자</strong>를 찾아요! (<strong>?</strong> 칸을 누르면 다시 들려줘요)`;
+  playVoiceSequence([...voicePrefix, V.char(targetChar)]);
 
   // 임의의 다른 한글 음절 5개 + 정답 음절 1개 = 총 6개 카드 구성
   const distractorPool = ALL_SYLLABLES.filter(ch => ch !== targetChar && ch !== '핑');
@@ -533,13 +682,12 @@ function renderSyllableChoices(correctOpt) {
 }
 
 function handleSyllableCardClick(btnEl, clickedChar, correctOpt) {
-  if (puzzleTargetIndex === -1) return;
+  if (puzzleTargetIndex === -1 || isInputLocked()) return;
   const targetSlot = puzzleSlots[puzzleTargetIndex];
 
   if (clickedChar === targetSlot.char) {
-    // 맞았을 때: 경쾌한 효과음 + 글자 음성 + 빈칸에 쏙 들어감!
+    // 맞았을 때: 경쾌한 효과음 + 빈칸에 쏙 들어감! (글자 소리는 아래에서 다음 글자 소리와 이어서 재생)
     playSound('pop');
-    speakChar(clickedChar);
 
     targetSlot.filled = true;
     targetSlot.justFilled = true;
@@ -552,22 +700,35 @@ function handleSyllableCardClick(btnEl, clickedChar, correctOpt) {
       // 모든 글자 카드를 순서대로 다 맞췄을 때!
       finishSyllablePuzzle(correctOpt);
     } else {
-      // 다음 글자 맞추기 카드 6개 새로 띄우기
-      renderSyllableChoices(correctOpt);
+      // 다음 글자 맞추기 카드 6개 새로 띄우기 ("빙" 하고 읽어준 뒤 다음 찾을 글자 "글")
+      renderSyllableChoices(correctOpt, [V.char(clickedChar)]);
     }
   } else {
-    // 틀렸을 때: 효과음과 함께 글자 카드가 부르르 진동하면서 안 들어가는 모션!
+    // 틀렸을 때: 카드가 부르르 떨고, 누른 글자 소리 → 찾을 글자 소리를 비교해서 들려줌
+    mistakes.letters++;
     playSound('wrong');
     btnEl.classList.remove('reject-shake');
     void btnEl.offsetWidth; // 리플로우로 애니메이션 재실행 보장
     btnEl.classList.add('reject-shake');
+    playVoiceSequence([V.thisIs(), V.char(clickedChar), V.findChar(), V.char(targetSlot.char)]);
+    lockInput(CARD_LOCK_MS);
+    document.getElementById('feedback-msg').innerHTML =
+      `🙅 이건 <strong>'${clickedChar}'</strong> 글자예요. 소리를 다시 듣고 찾아봐요!`;
   }
 }
 
 function finishSyllablePuzzle(correctOpt) {
-  score++;
-  learnedList.push(correctOpt);
-  document.getElementById('score-pill').textContent = `💖${score}`;
+  unlockInput();
+  // 캐치 판정: 이름을 한 번에 맞히고 글자 퍼즐 실수가 적을 때만 도감에 등록
+  const caught = mistakes.name <= CATCH_MAX_NAME_MISTAKES && mistakes.letters <= CATCH_MAX_LETTER_MISTAKES;
+  const isNew = caught && !caughtNames.has(correctOpt.name);
+  if (caught) {
+    score++;
+    caughtNames.add(correctOpt.name);
+    saveCaught();
+  }
+  learnedList.push({ ...correctOpt, caught, isNew });
+  document.getElementById('score-pill').textContent = `⭐${score}`;
   document.getElementById('progress-fill').style.width = `${((currentIndex + 1) / questions.length) * 100}%`;
 
   document.getElementById('syllable-learn-box').classList.add('completed');
@@ -578,30 +739,41 @@ function finishSyllablePuzzle(correctOpt) {
     b.style.opacity = '0.5';
   });
 
+  // 마지막 글자 소리를 먼저 들려준 뒤 축하 (음성 플레이어를 재사용하므로 아이폰에서도 이어서 재생됨)
+  const lastChar = puzzleSlots.filter(s => !s.fixed && !s.isSpace).pop();
+  playVoiceSequence([
+    ...(lastChar ? [V.char(lastChar.char)] : []),
+    V.correct(correctOpt.name),
+    caught ? V.caught() : V.almost()
+  ]);
+
   celebrateTimer = setTimeout(() => {
     celebrateTimer = null;
     playSound('correct');
-    fireConfetti(45);
-    speakCorrect(correctOpt.name);
+    fireConfetti(caught ? 70 : 30);
+    if (caught) {
+      document.getElementById('catch-stamp').className = 'catch-stamp show' + (isNew ? ' new' : '');
+    }
   }, 280);
 
-  // 5초 카운트다운 후 자동으로 다음 문제로 이동
-  let remainSec = 5;
+  // 몇 초 카운트다운 후 자동으로 다음 문제로 이동
+  let remainSec = AUTO_NEXT_SEC;
   const feedbackEl = document.getElementById('feedback-msg');
   const nextBtn = document.getElementById('next-btn');
   nextBtn.classList.add('show');
-  feedbackEl.innerHTML = `🎉 <strong>${correctOpt.name} 완성!</strong> (${remainSec}초 뒤 다음 문제)`;
+  const message = () => caught
+    ? `⭐ <strong>${correctOpt.name} 캐치!</strong>${isNew ? ' 새 친구!' : ''} (${remainSec}초)`
+    : `👏 <strong>${correctOpt.name} 완성!</strong> 다음엔 캐치! (${remainSec}초)`;
+  feedbackEl.innerHTML = message();
 
   countdownInterval = setInterval(() => {
     remainSec -= 1;
-    if (remainSec > 0) {
-      feedbackEl.innerHTML = `🎉 <strong>${correctOpt.name} 완성!</strong> (${remainSec}초 뒤 다음 문제)`;
-    }
+    if (remainSec > 0) feedbackEl.innerHTML = message();
   }, 1000);
 
   autoNextTimer = setTimeout(() => {
     nextQuestion();
-  }, 5000);
+  }, AUTO_NEXT_SEC * 1000);
 }
 
 function nextQuestion() {
@@ -621,15 +793,17 @@ function showResults() {
   fireConfetti(80);
   playVoiceFile('audio/common/finish.mp3', '우와! 문제를 모두 풀었어요! 정말 잘했어요, 츄!');
 
+  const newCount = learnedList.filter(i => i.isNew).length;
   document.getElementById('result-score-text').innerHTML =
-    `총 <strong>${questions.length}</strong>명의 티니핑 친구 이름을 모두 배웠어요! 💖`;
+    `<strong>${questions.length}</strong>문제 중 <strong>⭐ ${score}마리</strong>를 한 번에 캐치했어요!` +
+    (newCount ? `<br>📖 도감에 새 친구 <strong>${newCount}마리</strong> 등록!` : '');
 
   const grid = document.getElementById('learned-grid');
   grid.innerHTML = '';
   learnedList.forEach(item => {
     const chip = document.createElement('div');
-    chip.className = 'learned-chip';
-    chip.innerHTML = `<img src="${item.img}" alt="${item.name}" /> <span>${item.name} 🔊</span>`;
+    chip.className = 'learned-chip' + (item.caught ? ' caught' : '');
+    chip.innerHTML = `<img src="${item.img}" alt="${item.name}" /> <span>${item.caught ? '⭐' : '💪'} ${item.name} 🔊</span>`;
     chip.onclick = () => speakName(item.name, true);
     grid.appendChild(chip);
   });

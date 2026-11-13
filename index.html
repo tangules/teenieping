@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=2" />
+  <link rel="stylesheet" href="css/style.css?v=4" />
 </head>
 <body>
   <canvas id="confetti-canvas"></canvas>
@@ -30,8 +30,13 @@
         </div>
         <div class="setting-group">
           <button id="tts-toggle-btn" class="pill-btn active" onclick="toggleTTS()">하츄핑 목소리 켜짐 🔊</button>
+          <button id="read-aloud-btn" class="pill-btn" onclick="toggleReadAloud()">버튼 읽어주기 꺼짐 🔤</button>
         </div>
       </div>
+
+      <button class="collection-open-btn" onclick="openCollection()">
+        📖 내 티니핑 도감 <span class="collection-count" id="collection-count">0/154</span>
+      </button>
 
       <div class="season-grid">
         <button class="season-btn season-1" onclick="startGame(1)">
@@ -107,16 +112,16 @@
 
     <!-- ==================== 2. 퀴즈 게임 화면 ==================== -->
     <section id="quiz-screen" class="screen">
-      <!-- 최상단 바: 좌측에 정답듣기/힌트, 우측에 진행상태/홈 버튼 배치 -->
+      <!-- 최상단 바: 좌측에 다시듣기/힌트, 우측에 진행상태/홈 버튼 배치 -->
       <div class="quiz-topbar">
         <div class="topbar-left">
-          <button class="helper-btn voice-btn" onclick="speakCurrentAnswer()">🔊 정답듣기</button>
+          <button class="helper-btn voice-btn" onclick="speakCurrentAnswer()">🔊 다시듣기</button>
           <button class="helper-btn" onclick="toggleHint()">💡 힌트</button>
         </div>
         <div class="topbar-right">
           <span class="status-pill" id="char-season-badge">1기·로열</span>
           <span class="status-pill" id="progress-pill">1/10</span>
-          <span class="status-pill" id="score-pill">💖0</span>
+          <span class="status-pill" id="score-pill">⭐0</span>
           <button class="nav-btn" onclick="goHome()">🏠 홈</button>
         </div>
       </div>
@@ -131,6 +136,7 @@
           <img id="quiz-image" src="" alt="티니핑 이미지" />
 
           <div class="hint-box" id="hint-box"></div>
+          <div class="catch-stamp" id="catch-stamp">CATCH!</div>
         </div>
 
         <!-- 중간: 2단계 초대형 한글 빈칸 슬롯 영역 (기존 대비 3배 확대한 큼직한 글자 칸!) -->
@@ -149,6 +155,17 @@
       </div>
     </section>
 
+    <!-- ==================== 4. 내 티니핑 도감 화면 ==================== -->
+    <section id="collection-screen" class="screen">
+      <div class="collection-header">
+        <button class="nav-btn" onclick="goHome()">🏠 홈</button>
+        <div class="collection-title">📖 내 티니핑 도감</div>
+      </div>
+      <div class="collection-summary" id="collection-summary"></div>
+      <div class="collection-tip">한 번에 맞히면 티니핑을 캐치할 수 있어요! 잡은 친구를 누르면 이름을 들려줘요.</div>
+      <div id="collection-list"></div>
+    </section>
+
     <!-- ==================== 3. 결과 축하 화면 ==================== -->
     <section id="result-screen" class="screen">
       <div class="result-card">
@@ -156,7 +173,7 @@
         <h2 class="result-title">참 잘했어요! 한글 박사님!</h2>
         <div class="result-score" id="result-score-text"></div>
 
-        <div class="learned-words-title">👇 오늘 맞힌 티니핑 이름을 눌러서 다시 들어보세요!</div>
+        <div class="learned-words-title">👇 ⭐는 캐치 성공, 💪는 다음에 다시 도전! 이름을 누르면 들려줘요</div>
         <div class="learned-grid" id="learned-grid"></div>
 
         <div class="result-actions">
@@ -167,7 +184,7 @@
     </section>
   </div>
 
-  <script src="data/teenieping-data.js?v=2"></script>
-  <script src="js/game.js?v=2"></script>
+  <script src="data/teenieping-data.js?v=4"></script>
+  <script src="js/game.js?v=4"></script>
 </body>
 </html>

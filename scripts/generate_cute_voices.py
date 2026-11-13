@@ -64,6 +64,8 @@ async def main():
     for name in names:
         tasks_info.append((name, os.path.join(AUDIO_DIR, "names", f"{name}.mp3")))
         tasks_info.append((f"{name}! 정답이에요!", os.path.join(AUDIO_DIR, "correct", f"{name}.mp3")))
+        # 문제 안내: 모든 이름이 '핑'(받침 ㅇ)으로 끝나므로 조사는 '을'
+        tasks_info.append((f"{name}을 찾아봐!", os.path.join(AUDIO_DIR, "prompts", f"{name}.mp3")))
 
     for ch in chars:
         tasks_info.append((ch, os.path.join(AUDIO_DIR, "chars", f"{ch}.mp3")))
@@ -71,6 +73,10 @@ async def main():
     tasks_info.append(("우와! 문제를 모두 풀었어요! 정말 잘했어요, 츄!", os.path.join(AUDIO_DIR, "common", "finish.mp3")))
     tasks_info.append(("하츄핑 목소리가 켜졌어요, 츄!", os.path.join(AUDIO_DIR, "common", "tts_on.mp3")))
     tasks_info.append(("틀렸습니다!", os.path.join(AUDIO_DIR, "common", "wrong.mp3")))
+    tasks_info.append(("와! 한 번에 맞혔어요! 티니핑 캐치!", os.path.join(AUDIO_DIR, "common", "catch.mp3")))
+    tasks_info.append(("잘했어요! 다음엔 한 번에 캐치해 보자!", os.path.join(AUDIO_DIR, "common", "almost.mp3")))
+    tasks_info.append(("이건", os.path.join(AUDIO_DIR, "common", "this_is.mp3")))
+    tasks_info.append(("찾는 글자는", os.path.join(AUDIO_DIR, "common", "find_char.mp3")))
 
     print(f"총 {len(tasks_info)}개의 귀여운 하츄핑 톤 음성 파일(MP3) 생성을 시작합니다...")
     sem = asyncio.Semaphore(20)

@@ -853,3 +853,179 @@ html, body {
   pointer-events: none;
   z-index: 999;
 }
+
+/* ==================== 막 누르기 방지: 틀린 뒤 잠깐 잠금 ==================== */
+.choices-grid.locked button {
+  pointer-events: none;
+  filter: grayscale(0.35);
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+/* ==================== 캐치 성공 도장 ==================== */
+.catch-stamp {
+  position: absolute;
+  top: 22px;
+  right: 14px;
+  z-index: 5;
+  padding: 6px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #ffca3a, #ff5c93);
+  color: #fff;
+  font-size: clamp(1.3rem, 6vw, 2rem);
+  letter-spacing: 1px;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 16px rgba(255, 92, 147, 0.35);
+  transform: rotate(12deg) scale(0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.catch-stamp.show {
+  animation: stampIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.catch-stamp.show.new::after {
+  content: 'NEW';
+  position: absolute;
+  top: -10px;
+  left: -12px;
+  background: #4361ee;
+  font-size: 0.55em;
+  padding: 2px 6px;
+  border-radius: 8px;
+  transform: rotate(-20deg);
+}
+
+@keyframes stampIn {
+  0% { transform: rotate(12deg) scale(2.2); opacity: 0; }
+  100% { transform: rotate(12deg) scale(1); opacity: 1; }
+}
+
+/* ==================== 결과 화면: 캐치 / 다시 도전 구분 ==================== */
+.learned-chip.caught {
+  border-color: #ffca3a;
+  background: #fffbea;
+}
+
+.learned-chip:not(.caught) {
+  opacity: 0.75;
+}
+
+/* ==================== 홈: 내 도감 버튼 ==================== */
+.collection-open-btn {
+  font-family: inherit;
+  font-size: clamp(1rem, 4vw, 1.2rem);
+  color: #fff;
+  background: linear-gradient(135deg, #9b5de5, #ff5c93);
+  border: none;
+  border-radius: 14px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  box-shadow: 0 4px 0 #753bbd;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.collection-open-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #753bbd;
+}
+
+.collection-count {
+  display: inline-block;
+  margin-left: 6px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 1px 10px;
+}
+
+/* ==================== 도감 화면 ==================== */
+#collection-screen {
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+
+.collection-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.collection-title {
+  font-size: clamp(1.3rem, 5.5vw, 1.7rem);
+  color: var(--pink-dark);
+}
+
+.collection-summary {
+  font-size: 1.15rem;
+  color: var(--purple-dark);
+  margin: 2px 0;
+}
+
+.collection-tip {
+  font-size: 0.9rem;
+  color: #8a6b94;
+  margin-bottom: 6px;
+}
+
+.collection-season-title {
+  margin: 10px 0 6px;
+  font-size: 1.05rem;
+  color: var(--text-dark);
+}
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+}
+
+.collection-cell {
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  background: #fff;
+  border: 2px solid #eee0f3;
+  border-radius: 12px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.collection-cell img {
+  width: 100%;
+  max-width: 64px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  filter: brightness(0) opacity(0.18); /* 아직 못 잡은 친구는 그림자만 */
+}
+
+.collection-cell span {
+  font-size: 0.78rem;
+  color: #b9a6c2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.collection-cell.caught {
+  border-color: #ffca3a;
+  background: #fffbea;
+}
+
+.collection-cell.caught img {
+  filter: none;
+}
+
+.collection-cell.caught span {
+  color: var(--text-dark);
+}
+
+.collection-cell.reject-shake {
+  animation: rejectVibrate 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
