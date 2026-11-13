@@ -26,6 +26,16 @@ def load_teenieping_data() -> list:
     start, end = text.index("["), text.rindex("]")
     return json.loads(text[start:end + 1])
 
+# 자음은 글자 이름(기역, 니은…), 모음은 소리(아, 야…)로 읽어줍니다.
+JAMO_NAMES = {
+    "ㄱ": "기역", "ㄲ": "쌍기역", "ㄴ": "니은", "ㄷ": "디귿", "ㄸ": "쌍디귿", "ㄹ": "리을",
+    "ㅁ": "미음", "ㅂ": "비읍", "ㅃ": "쌍비읍", "ㅅ": "시옷", "ㅆ": "쌍시옷", "ㅇ": "이응",
+    "ㅈ": "지읒", "ㅉ": "쌍지읒", "ㅊ": "치읓", "ㅋ": "키읔", "ㅌ": "티읕", "ㅍ": "피읖", "ㅎ": "히읗",
+    "ㅏ": "아", "ㅐ": "애", "ㅑ": "야", "ㅒ": "얘", "ㅓ": "어", "ㅔ": "에", "ㅕ": "여", "ㅖ": "예",
+    "ㅗ": "오", "ㅘ": "와", "ㅙ": "왜", "ㅚ": "외", "ㅛ": "요", "ㅜ": "우", "ㅝ": "워", "ㅞ": "웨",
+    "ㅟ": "위", "ㅠ": "유", "ㅡ": "으", "ㅢ": "의", "ㅣ": "이",
+}
+
 VOICE = "ko-KR-SunHiNeural"
 PITCH = "+50Hz"   # 귀엽고 통통 튀는 하츄핑 스타일 고음역 피치
 RATE = "+6%"     # 밝고 경쾌한 속도
@@ -69,6 +79,10 @@ async def main():
 
     for ch in chars:
         tasks_info.append((ch, os.path.join(AUDIO_DIR, "chars", f"{ch}.mp3")))
+
+    # 자음·모음 이름 (2단계 자모 맞추기용): audio/jamo/<자모>.mp3
+    for jamo, spoken in JAMO_NAMES.items():
+        tasks_info.append((spoken, os.path.join(AUDIO_DIR, "jamo", f"{jamo}.mp3")))
 
     tasks_info.append(("우와! 문제를 모두 풀었어요! 정말 잘했어요, 츄!", os.path.join(AUDIO_DIR, "common", "finish.mp3")))
     tasks_info.append(("하츄핑 목소리가 켜졌어요, 츄!", os.path.join(AUDIO_DIR, "common", "tts_on.mp3")))

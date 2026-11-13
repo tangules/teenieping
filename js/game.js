@@ -1,9 +1,31 @@
-// 전체 티니핑 이름에서 추출한 고유 한글 음절 목록 ('핑' 제외, 글자 카드 오답 보기용)
-const ALL_SYLLABLES = Array.from(
-  new Set(
-    TEENIEPINGS.flatMap(item => Array.from(item.name)).filter(ch => ch.trim() !== '' && ch !== '핑')
-  )
-);
+// ---- 한글 자모(자음·모음) 도구 : 2단계 "자음·모음 순서대로 맞추기"용 ----
+const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+const JUNG = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
+const JONG = ['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+
+// 오답 보기로 쓸 기본 자음·모음 (처음 배우는 아이 기준)
+const BASIC_CONSONANTS = ['ㄱ','ㄴ','ㄷ','ㄹ','ㅁ','ㅂ','ㅅ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+const BASIC_VOWELS = ['ㅏ','ㅑ','ㅓ','ㅕ','ㅗ','ㅛ','ㅜ','ㅠ','ㅡ','ㅣ'];
+
+// 자음은 글자 이름, 모음은 소리로 읽기 (audio/jamo/*.mp3 와 같은 내용, 파일이 없을 때 대신 읽기용)
+const JAMO_SPOKEN = {
+  'ㄱ':'기역','ㄲ':'쌍기역','ㄴ':'니은','ㄷ':'디귿','ㄸ':'쌍디귿','ㄹ':'리을','ㅁ':'미음','ㅂ':'비읍','ㅃ':'쌍비읍',
+  'ㅅ':'시옷','ㅆ':'쌍시옷','ㅇ':'이응','ㅈ':'지읒','ㅉ':'쌍지읒','ㅊ':'치읓','ㅋ':'키읔','ㅌ':'티읕','ㅍ':'피읖','ㅎ':'히읗',
+  'ㅏ':'아','ㅐ':'애','ㅑ':'야','ㅒ':'얘','ㅓ':'어','ㅔ':'에','ㅕ':'여','ㅖ':'예','ㅗ':'오','ㅘ':'와','ㅙ':'왜','ㅚ':'외',
+  'ㅛ':'요','ㅜ':'우','ㅝ':'워','ㅞ':'웨','ㅟ':'위','ㅠ':'유','ㅡ':'으','ㅢ':'의','ㅣ':'이'
+};
+
+// '하' → ['ㅎ','ㅏ'], '빙' → ['ㅂ','ㅣ','ㅇ'] (받침이 있으면 3개)
+function decomposeHangul(ch) {
+  const code = ch.charCodeAt(0) - 0xAC00;
+  if (code < 0 || code >= 11172) return [ch];
+  const jong = JONG[code % 28];
+  return [CHO[Math.floor(code / 588)], JUNG[Math.floor((code % 588) / 28)], ...(jong ? [jong] : [])];
+}
+
+function isVowel(j) {
+  return JUNG.includes(j);
+}
 
 let selectedLimit = 10;
 let ttsEnabled = true;
@@ -22,16 +44,18 @@ let lockTimer = null;          // 틀린 뒤 잠깐 버튼을 못 누르게 하�
 let readAloudHelp = false;     // true면 예전 방식: 버튼 한 번 누르면 읽어주고, 두 번 누르면 제출
 let mistakes = { name: 0, letters: 0 }; // 이번 문제에서 틀린 횟수 (캐치 여부 판단)
 
-// 캐치 조건: 이름은 한 번에 맞히고, 글자 퍼즐은 실수 1번까지 봐줌
+// 캐치 조건: 이름은 한 번에 맞히고, 자음·모음 맞추기는 실수 2번까지 봐줌
 const CATCH_MAX_NAME_MISTAKES = 0;
-const CATCH_MAX_LETTER_MISTAKES = 1;
+const CATCH_MAX_LETTER_MISTAKES = 2;   // 자모는 누르는 횟수가 많아서 2번까지 봐줌
 const WRONG_LOCK_MS = 2000;    // 1단계 이름 틀렸을 때 잠금 시간
-const CARD_LOCK_MS = 1200;     // 2단계 글자 카드 틀렸을 때 잠금 시간
+const CARD_LOCK_MS = 1200;     // 2단계 자모 카드 틀렸을 때 잠금 시간
+const JAMO_CHOICES = 4;        // 2단계 보기 개수
 const AUTO_NEXT_SEC = 6;
 
 // 2단계 글자 맞추기 퍼즐 상태
-let puzzleSlots = [];       // [{ char: '꼼', fixed: false, filled: false }, { char: '딱', ... }, { char: '핑', fixed: true, filled: true }]
-let puzzleTargetIndex = 0;  // 현재 맞춰야 할 슬롯 인덱스
+let puzzleSlots = [];       // [{ char: '하', jamo: ['ㅎ','ㅏ'], done: false }, ..., { char: '핑', fixed: true, done: true }]
+let puzzleTargetIndex = 0;  // 지금 만들고 있는 글자(음절) 위치
+let jamoIndex = 0;          // 그 글자 안에서 지금 찾을 자모 위치
 
 function clearAutoNextTimers() {
   if (autoNextTimer) {
@@ -248,12 +272,14 @@ const V = {
   hint: (n, kw) => ({ path: `audio/hints/${encodeURIComponent(n)}.mp3`, text: `힌트! ${kw}의 티니핑이에요.` }),
   thisIs: () => ({ path: 'audio/common/this_is.mp3', text: '이건' }),
   findChar: () => ({ path: 'audio/common/find_char.mp3', text: '찾는 글자는' }),
+  jamo: j => ({ path: `audio/jamo/${encodeURIComponent(j)}.mp3`, text: JAMO_SPOKEN[j] || j }),
   caught: () => ({ path: 'audio/common/catch.mp3', text: '와! 한 번에 맞혔어요! 티니핑 캐치!' }),
   almost: () => ({ path: 'audio/common/almost.mp3', text: '잘했어요! 다음엔 한 번에 캐치해 보자!' })
 };
 
 function speakName(name, force = false) { playVoiceSequence([V.name(name)], force); }
 function speakChar(ch, force = false) { playVoiceSequence([V.char(ch)], force); }
+function speakJamo(j, force = false) { playVoiceSequence([V.jamo(j)], force); }
 function speakHint(name, keyword, force = false) { playVoiceSequence([V.hint(name, keyword)], force); }
 
 // ---- 설정 저장 (문제 수 / 목소리 켜짐) : 다음에 열어도 그대로 유지 ----
@@ -374,8 +400,49 @@ function openCollection() {
     });
     wrap.appendChild(grid);
   }
+  document.getElementById('collection-reset-btn').disabled = caughtNames.size === 0;
   showScreen('collection-screen');
   document.getElementById('collection-screen').scrollTop = 0;
+}
+
+// ---- 확인 창: 실수로 누르지 않도록 한 번 더 물어봄 ("아니요"가 크고 먼저 보이게) ----
+function showConfirm({ title, text, okLabel, onOk }) {
+  const modal = document.getElementById('confirm-modal');
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-text').textContent = text;
+  const okBtn = document.getElementById('confirm-ok');
+  const cancelBtn = document.getElementById('confirm-cancel');
+  okBtn.textContent = okLabel;
+
+  const close = () => {
+    modal.classList.remove('show');
+    okBtn.onclick = null;
+    cancelBtn.onclick = null;
+    modal.onclick = null;
+  };
+  cancelBtn.onclick = close;
+  modal.onclick = e => { if (e.target === modal) close(); }; // 바깥을 눌러도 취소
+  okBtn.onclick = () => { close(); onOk(); };
+
+  // 확인 버튼은 0.8초 뒤에야 눌리게 → 창이 뜨자마자 연달아 눌러서 지워지는 것 방지
+  okBtn.disabled = true;
+  setTimeout(() => { okBtn.disabled = false; }, 800);
+  modal.classList.add('show');
+}
+
+function askResetCollection() {
+  if (caughtNames.size === 0) return;
+  showConfirm({
+    title: '도감을 처음부터 다시 시작할까요?',
+    text: `지금까지 캐치한 티니핑 ${caughtNames.size}마리가 모두 사라지고, 되돌릴 수 없어요.`,
+    okLabel: '네, 모두 지울게요',
+    onOk: () => {
+      caughtNames = new Set();
+      saveCaught();
+      renderCollectionCount();
+      openCollection();
+    }
+  });
 }
 
 // ---- 홈 화면 시즌별 마리 수를 데이터에서 자동 계산 (데이터를 고쳐도 숫자가 맞게) ----
@@ -495,7 +562,7 @@ function renderQuestion() {
   const options = shuffle([q, ...distractors]);
 
   const grid = document.getElementById('choices-grid');
-  grid.classList.remove('syllable-mode');
+  grid.classList.remove('syllable-mode', 'jamo-mode');
   grid.innerHTML = '';
 
   options.forEach((opt, idx) => {
@@ -558,7 +625,7 @@ function handleChoice(btnEl, selectedOpt, correctOpt) {
     playSound('correct');
 
     // 1단계 정답 맞힘 -> 2단계 한글 글자 카드 순서대로 맞추기 시작! (이름을 읽어준 뒤 첫 글자 소리)
-    startSyllablePuzzle(correctOpt, [V.name(correctOpt.name)]);
+    startSyllablePuzzle(correctOpt, [V.name(correctOpt.name)]);  // 이름을 읽어준 뒤 자모 맞추기 시작
   } else {
     // 틀렸을 때: 누른 것과 정답을 비교해서 들려주고, 잠깐 쉬었다가 다시 고르게 함
     mistakes.name++;
@@ -572,7 +639,9 @@ function handleChoice(btnEl, selectedOpt, correctOpt) {
   }
 }
 
-// ==================== 2단계: 한글 글자 카드 순서대로 맞추기 퍼즐 ====================
+// ==================== 2단계: 자음·모음을 순서대로 눌러 이름 만들기 ====================
+// 그림과 정답 이름을 크게 보여준 채로, 지금 글자(예: '하')를 이루는 자모를 순서대로 찾습니다. ('ㅎ' → 'ㅏ')
+// 마지막 '핑'은 고정으로 채워둡니다.
 function startSyllablePuzzle(correctOpt, voicePrefix = []) {
   document.getElementById('hint-box').classList.remove('show');
   document.getElementById('image-stage').classList.add('puzzle-mode');
@@ -580,16 +649,16 @@ function startSyllablePuzzle(correctOpt, voicePrefix = []) {
   const chars = Array.from(correctOpt.name);
   puzzleSlots = chars.map((ch, idx) => {
     if (ch === ' ') {
-      return { char: ' ', isSpace: true, fixed: true, filled: true };
+      return { char: ' ', isSpace: true, fixed: true, done: true, jamo: [] };
     }
-    // 맨 마지막 '핑' 글자는 문제로 내지 않고 고정으로 넣어둠!
     const isLastPing = (idx === chars.length - 1 && ch === '핑');
     return {
       char: ch,
       isSpace: false,
       fixed: isLastPing,
-      filled: isLastPing,
-      justFilled: false
+      done: isLastPing,
+      justFilled: false,
+      jamo: isLastPing ? [] : decomposeHangul(ch)
     };
   });
 
@@ -597,19 +666,19 @@ function startSyllablePuzzle(correctOpt, voicePrefix = []) {
   learnBox.classList.remove('completed');
   learnBox.classList.add('show');
 
-  // 첫 번째로 맞춰야 할 빈칸 찾기
-  puzzleTargetIndex = puzzleSlots.findIndex(s => !s.filled);
+  puzzleTargetIndex = puzzleSlots.findIndex(s => !s.done);
+  jamoIndex = 0;
 
   if (puzzleTargetIndex === -1) {
-    // 만약 맞춰야 할 글자가 없다면 바로 완료 처리
-    finishSyllablePuzzle(correctOpt);
+    finishSyllablePuzzle(correctOpt, voicePrefix);
   } else {
     renderPuzzleSlots();
-    renderSyllableChoices(correctOpt, voicePrefix);
+    renderJamoChoices(correctOpt, voicePrefix);
   }
 }
 
 function renderPuzzleSlots() {
+  // 위쪽: 정답 이름을 글자 칸으로 크게 표시 (완성한 글자 / 지금 글자 / 남은 글자)
   const blocksWrap = document.getElementById('syllable-blocks');
   blocksWrap.innerHTML = '';
 
@@ -631,93 +700,131 @@ function renderPuzzleSlots() {
 
     const el = document.createElement('div');
     el.className = 'syllable-slot';
+    el.textContent = slot.char;
+    el.onclick = () => speakChar(slot.char, true); // 글자를 누르면 그 글자 소리
 
     if (slot.fixed) {
       el.classList.add('fixed-ping');
-      el.textContent = slot.char;
-      el.onclick = () => speakChar(slot.char, true);
-    } else if (slot.filled) {
+    } else if (slot.done) {
       el.classList.add('filled');
       if (slot.justFilled) {
         el.classList.add('just-filled');
         slot.justFilled = false;
       }
-      el.textContent = slot.char;
-      el.onclick = () => speakChar(slot.char, true);
     } else if (idx === puzzleTargetIndex) {
-      el.classList.add('active-target');
-      el.textContent = '?';
-      el.onclick = () => speakChar(slot.char, true); // ? 칸을 누르면 찾을 글자 소리를 다시 들려줌
+      el.classList.add('active-target', 'show-char');
     } else {
-      el.textContent = '?';
+      el.classList.add('upcoming');
     }
 
     blocksWrap.appendChild(el);
   });
+
+  // 아래쪽: 지금 글자의 자모 칸 (예: '하' → [ㅎ][?])
+  const row = document.getElementById('jamo-row');
+  row.innerHTML = '';
+  const target = puzzleSlots[puzzleTargetIndex];
+  if (!target) return;
+
+  const label = document.createElement('div');
+  label.className = 'jamo-target-char';
+  label.textContent = target.char;
+  label.onclick = () => speakChar(target.char, true);
+  row.appendChild(label);
+
+  const eq = document.createElement('div');
+  eq.className = 'jamo-eq';
+  eq.textContent = '=';
+  row.appendChild(eq);
+
+  target.jamo.forEach((j, i) => {
+    if (i > 0) {
+      const plus = document.createElement('div');
+      plus.className = 'jamo-eq';
+      plus.textContent = '+';
+      row.appendChild(plus);
+    }
+    const cell = document.createElement('div');
+    cell.className = 'jamo-slot';
+    if (i < jamoIndex) {
+      cell.classList.add('filled', isVowel(j) ? 'vowel' : 'consonant');
+      cell.textContent = j;
+      cell.onclick = () => speakJamo(j, true);
+    } else {
+      if (i === jamoIndex) cell.classList.add('active');
+      cell.textContent = '?';
+    }
+    row.appendChild(cell);
+  });
 }
 
-function renderSyllableChoices(correctOpt, voicePrefix = []) {
-  const targetChar = puzzleSlots[puzzleTargetIndex].char;
-  // 찾을 글자를 화면에 써 주지 않고 소리로만 알려줌 (글자 모양만 보고 똑같은 걸 고르지 않도록)
+function renderJamoChoices(correctOpt, voice = []) {
+  const target = puzzleSlots[puzzleTargetIndex];
+  const targetJamo = target.jamo[jamoIndex];
+  const kind = isVowel(targetJamo) ? '모음' : '자음';
   document.getElementById('feedback-msg').innerHTML =
-    `🧩 소리를 듣고 <strong>빈칸 글자</strong>를 찾아요! (<strong>?</strong> 칸을 누르면 다시 들려줘요)`;
-  playVoiceSequence([...voicePrefix, V.char(targetChar)]);
+    `🔤 <strong>'${target.char}'</strong>의 ${jamoIndex + 1}번째 <strong>${kind}</strong>을 찾아요!`;
+  if (voice.length) playVoiceSequence(voice);
 
-  // 임의의 다른 한글 음절 5개 + 정답 음절 1개 = 총 6개 카드 구성
-  const distractorPool = ALL_SYLLABLES.filter(ch => ch !== targetChar && ch !== '핑');
-  const distractors = shuffle(distractorPool).slice(0, 5);
-  const cardChars = shuffle([targetChar, ...distractors]);
+  // 정답 1개 + 같은 종류(자음이면 자음, 모음이면 모음) 오답 3개
+  const basePool = isVowel(targetJamo) ? BASIC_VOWELS : BASIC_CONSONANTS;
+  const distractors = shuffle(basePool.filter(j => j !== targetJamo)).slice(0, JAMO_CHOICES - 1);
+  const cards = shuffle([targetJamo, ...distractors]);
 
   const grid = document.getElementById('choices-grid');
-  grid.classList.add('syllable-mode');
+  grid.classList.add('syllable-mode', 'jamo-mode');
   grid.innerHTML = '';
 
-  cardChars.forEach(ch => {
+  cards.forEach(j => {
     const btn = document.createElement('button');
-    btn.className = 'syllable-card-btn';
-    btn.textContent = ch;
-    btn.onclick = () => handleSyllableCardClick(btn, ch, correctOpt);
+    btn.className = 'syllable-card-btn jamo-card ' + (isVowel(j) ? 'vowel' : 'consonant');
+    btn.textContent = j;
+    btn.onclick = () => handleJamoCardClick(btn, j, correctOpt);
     grid.appendChild(btn);
   });
 }
 
-function handleSyllableCardClick(btnEl, clickedChar, correctOpt) {
+function handleJamoCardClick(btnEl, clickedJamo, correctOpt) {
   if (puzzleTargetIndex === -1 || isInputLocked()) return;
-  const targetSlot = puzzleSlots[puzzleTargetIndex];
+  const target = puzzleSlots[puzzleTargetIndex];
+  const expected = target.jamo[jamoIndex];
 
-  if (clickedChar === targetSlot.char) {
-    // 맞았을 때: 경쾌한 효과음 + 빈칸에 쏙 들어감! (글자 소리는 아래에서 다음 글자 소리와 이어서 재생)
+  if (clickedJamo === expected) {
     playSound('pop');
+    jamoIndex++;
 
-    targetSlot.filled = true;
-    targetSlot.justFilled = true;
-
-    // 다음 빈칸 찾기
-    puzzleTargetIndex = puzzleSlots.findIndex(s => !s.filled);
-    renderPuzzleSlots();
-
-    if (puzzleTargetIndex === -1) {
-      // 모든 글자 카드를 순서대로 다 맞췄을 때!
-      finishSyllablePuzzle(correctOpt);
+    if (jamoIndex >= target.jamo.length) {
+      // 한 글자 완성: "아" → "하!" 처럼 자모 소리 뒤에 완성된 글자 소리
+      target.done = true;
+      target.justFilled = true;
+      const voice = [V.jamo(clickedJamo), V.char(target.char)];
+      puzzleTargetIndex = puzzleSlots.findIndex(s => !s.done);
+      jamoIndex = 0;
+      renderPuzzleSlots();
+      if (puzzleTargetIndex === -1) {
+        finishSyllablePuzzle(correctOpt, voice);
+      } else {
+        renderJamoChoices(correctOpt, voice);
+      }
     } else {
-      // 다음 글자 맞추기 카드 6개 새로 띄우기 ("빙" 하고 읽어준 뒤 다음 찾을 글자 "글")
-      renderSyllableChoices(correctOpt, [V.char(clickedChar)]);
+      renderPuzzleSlots();
+      renderJamoChoices(correctOpt, [V.jamo(clickedJamo)]);
     }
   } else {
-    // 틀렸을 때: 카드가 부르르 떨고, 누른 글자 소리 → 찾을 글자 소리를 비교해서 들려줌
+    // 틀렸을 때: 카드가 부르르 떨고, 누른 자모 이름을 알려준 뒤 잠깐 잠금
     mistakes.letters++;
     playSound('wrong');
     btnEl.classList.remove('reject-shake');
-    void btnEl.offsetWidth; // 리플로우로 애니메이션 재실행 보장
+    void btnEl.offsetWidth;
     btnEl.classList.add('reject-shake');
-    playVoiceSequence([V.thisIs(), V.char(clickedChar), V.findChar(), V.char(targetSlot.char)]);
+    playVoiceSequence([V.thisIs(), V.jamo(clickedJamo)]);
     lockInput(CARD_LOCK_MS);
     document.getElementById('feedback-msg').innerHTML =
-      `🙅 이건 <strong>'${clickedChar}'</strong> 글자예요. 소리를 다시 듣고 찾아봐요!`;
+      `🙅 이건 <strong>'${clickedJamo}'</strong> ${JAMO_SPOKEN[clickedJamo] || ''}! <strong>'${target.char}'</strong> 글자를 잘 보고 찾아봐요!`;
   }
 }
 
-function finishSyllablePuzzle(correctOpt) {
+function finishSyllablePuzzle(correctOpt, voicePrefix = []) {
   unlockInput();
   // 캐치 판정: 이름을 한 번에 맞히고 글자 퍼즐 실수가 적을 때만 도감에 등록
   const caught = mistakes.name <= CATCH_MAX_NAME_MISTAKES && mistakes.letters <= CATCH_MAX_LETTER_MISTAKES;
@@ -739,10 +846,9 @@ function finishSyllablePuzzle(correctOpt) {
     b.style.opacity = '0.5';
   });
 
-  // 마지막 글자 소리를 먼저 들려준 뒤 축하 (음성 플레이어를 재사용하므로 아이폰에서도 이어서 재생됨)
-  const lastChar = puzzleSlots.filter(s => !s.fixed && !s.isSpace).pop();
+  // 마지막 자모·글자 소리를 먼저 들려준 뒤 축하 (음성 플레이어를 재사용하므로 아이폰에서도 이어서 재생됨)
   playVoiceSequence([
-    ...(lastChar ? [V.char(lastChar.char)] : []),
+    ...voicePrefix,
     V.correct(correctOpt.name),
     caught ? V.caught() : V.almost()
   ]);

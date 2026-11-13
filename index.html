@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=4" />
+  <link rel="stylesheet" href="css/style.css?v=6" />
 </head>
 <body>
   <canvas id="confetti-canvas"></canvas>
@@ -142,6 +142,7 @@
         <!-- 중간: 2단계 초대형 한글 빈칸 슬롯 영역 (기존 대비 3배 확대한 큼직한 글자 칸!) -->
         <div class="syllable-learn-box" id="syllable-learn-box">
           <div class="syllable-blocks" id="syllable-blocks"></div>
+          <div class="jamo-row" id="jamo-row"></div>
         </div>
 
         <!-- 바로 아래: 1단계(4개 객관식 버튼) -> 2단계(6개 한글 음절 카드) -->
@@ -160,6 +161,7 @@
       <div class="collection-header">
         <button class="nav-btn" onclick="goHome()">🏠 홈</button>
         <div class="collection-title">📖 내 티니핑 도감</div>
+        <button class="reset-btn" id="collection-reset-btn" onclick="askResetCollection()">🗑️ 초기화</button>
       </div>
       <div class="collection-summary" id="collection-summary"></div>
       <div class="collection-tip">한 번에 맞히면 티니핑을 캐치할 수 있어요! 잡은 친구를 누르면 이름을 들려줘요.</div>
@@ -184,7 +186,20 @@
     </section>
   </div>
 
-  <script src="data/teenieping-data.js?v=4"></script>
-  <script src="js/game.js?v=4"></script>
+  <!-- 확인 창 (도감 초기화 등 되돌릴 수 없는 동작 전에 한 번 더 묻기) -->
+  <div class="modal-backdrop" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div class="modal-card">
+      <div class="modal-icon">⚠️</div>
+      <div class="modal-title" id="confirm-title"></div>
+      <div class="modal-text" id="confirm-text"></div>
+      <div class="modal-actions">
+        <button class="modal-btn keep" id="confirm-cancel">아니요, 그대로 둘래요</button>
+        <button class="modal-btn danger" id="confirm-ok">네, 지울게요</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="data/teenieping-data.js?v=6"></script>
+  <script src="js/game.js?v=6"></script>
 </body>
 </html>

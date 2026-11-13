@@ -1029,3 +1029,189 @@ html, body {
 .collection-cell.reject-shake {
   animation: rejectVibrate 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
 }
+
+/* ==================== 2단계: 자음·모음 맞추기 ==================== */
+/* 정답 이름 칸: 자모 줄이 들어갈 자리를 위해 조금 작게 */
+.syllable-blocks .syllable-slot {
+  max-width: clamp(64px, 19vw, 112px);
+  height: clamp(64px, 19vw, 112px);
+  font-size: clamp(2.6rem, 9vw, 4.4rem);
+}
+
+.syllable-blocks .syllable-slot.upcoming {
+  border-style: solid;
+  border-color: #f1d9e6;
+  color: #c9a9bb;
+}
+
+.syllable-blocks .syllable-slot.show-char {
+  color: #e8590c;
+}
+
+/* 지금 글자 = 자모 + 자모 (+ 받침) */
+.jamo-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 1.5vw, 8px);
+  margin-top: 8px;
+  flex-wrap: nowrap;
+}
+
+.jamo-target-char {
+  font-size: clamp(2rem, 8vw, 2.8rem);
+  color: #e8590c;
+  min-width: 1.2em;
+  cursor: pointer;
+}
+
+.jamo-eq {
+  font-size: clamp(1.4rem, 5.5vw, 2rem);
+  color: #b48aa5;
+}
+
+.jamo-slot {
+  width: clamp(48px, 14vw, 66px);
+  height: clamp(48px, 14vw, 66px);
+  border-radius: 14px;
+  border: 3px dashed #c9b3d6;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(1.8rem, 7vw, 2.6rem);
+  color: #c9b3d6;
+}
+
+.jamo-slot.active {
+  border: 3px solid #ff9f1c;
+  background: #fff9db;
+  color: #ff9f1c;
+  animation: targetPulse 1s ease-in-out infinite;
+}
+
+.jamo-slot.filled {
+  border-style: solid;
+  cursor: pointer;
+  animation: slotSnapIn 0.3s ease-out;
+}
+
+/* 자음은 파랑, 모음은 빨강 계열 (한글 교구에서 흔히 쓰는 색 구분) */
+.jamo-slot.filled.consonant,
+.jamo-card.consonant {
+  border-color: #4361ee;
+  color: #3a0ca3;
+  background: #eef2ff;
+}
+
+.jamo-slot.filled.vowel,
+.jamo-card.vowel {
+  border-color: #f15bb5;
+  color: #b5179e;
+  background: #fff0f8;
+}
+
+.jamo-card.consonant { box-shadow: 0 6px 0 #4361ee, 0 8px 14px rgba(67, 97, 238, 0.16); }
+.jamo-card.vowel { box-shadow: 0 6px 0 #f15bb5, 0 8px 14px rgba(241, 91, 181, 0.16); }
+
+/* 보기 4개: 한 줄에 4개, 큼직하게 */
+.choices-grid.jamo-mode {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.jamo-card {
+  font-size: clamp(2.4rem, 10vw, 3.6rem);
+  min-height: 72px;
+}
+
+/* ==================== 도감 초기화 버튼 & 확인 창 ==================== */
+.reset-btn {
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #8a6b94;
+  background: #fff;
+  border: 1.5px solid #d9c6e2;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.reset-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(61, 38, 69, 0.45);
+}
+
+.modal-backdrop.show {
+  display: flex;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 360px;
+  background: #fff;
+  border-radius: 22px;
+  padding: 20px 16px 16px;
+  text-align: center;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  animation: popIn 0.2s ease-out;
+}
+
+.modal-icon {
+  font-size: 2.2rem;
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  color: var(--text-dark);
+  margin: 6px 0;
+}
+
+.modal-text {
+  font-size: 1rem;
+  color: #6b5475;
+  margin-bottom: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-btn {
+  font-family: inherit;
+  border-radius: 14px;
+  cursor: pointer;
+  padding: 12px;
+}
+
+.modal-btn.keep {
+  font-size: 1.15rem;
+  color: #fff;
+  background: var(--pink-main);
+  border: none;
+  box-shadow: 0 4px 0 var(--pink-dark);
+}
+
+.modal-btn.danger {
+  font-size: 0.95rem;
+  color: #c9184a;
+  background: #fff;
+  border: 1.5px solid #ffb3c1;
+}
+
+.modal-btn.danger:disabled {
+  opacity: 0.4;
+}
