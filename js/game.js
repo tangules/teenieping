@@ -360,9 +360,15 @@ function renderCollectionCount() {
   if (el) el.textContent = `${caughtNames.size}/${TEENIEPINGS.length}`;
 }
 
-function openCollection() {
+// opts.fromGame: 게임 중 CATCH! 도장을 눌러서 들어온 경우 → "계속하기"로 게임에 돌아갈 수 있음
+// opts.highlight: 방금 잡은 티니핑 이름 → 그 칸을 반짝이며 보여줌
+let collectionReturnToGame = false;
+
+function openCollection(opts = {}) {
   clearAutoNextTimers();
   stopCurrentVoice();
+  collectionReturnToGame = !!opts.fromGame;
+  document.getElementById('collection-continue-btn').style.display = collectionReturnToGame ? '' : 'none';
   const wrap = document.getElementById('collection-list');
   wrap.innerHTML = '';
   document.getElementById('collection-summary').textContent =
@@ -383,7 +389,8 @@ function openCollection() {
     members.forEach(t => {
       const caught = caughtNames.has(t.name);
       const cell = document.createElement('button');
-      cell.className = 'collection-cell' + (caught ? ' caught' : '');
+      cell.className = 'collection-cell' + (caught ? ' caught' : '') + (opts.highlight === t.name ? ' just-caught' : '');
+      cell.dataset.name = t.name;
       cell.innerHTML = `<img src="${t.img}" alt="" loading="lazy" /><span>${caught ? t.name : '???'}</span>`;
       cell.onclick = () => {
         if (caught) {
@@ -401,6 +408,21 @@ function openCollection() {
   document.getElementById('collection-reset-btn').disabled = caughtNames.size === 0;
   showScreen('collection-screen');
   document.getElementById('collection-screen').scrollTop = 0;
+
+  if (opts.highlight) {
+    const cell = wrap.querySelector('.collection-cell.just-caught');
+    if (cell) {
+      cell.scrollIntoView({ block: 'center' });
+      speakName(opts.highlight);
+    }
+  }
+}
+
+// 도감에서 "계속하기": 게임 화면으로 돌아가 다음 문제로
+function continueFromCollection() {
+  collectionReturnToGame = false;
+  showScreen('quiz-screen');
+  nextQuestion();
 }
 
 // ---- 확인 창: 실수로 누르지 않도록 한 번 더 물어봄 ("아니요"가 크고 먼저 보이게) ----
@@ -856,7 +878,10 @@ function finishSyllablePuzzle(correctOpt, voicePrefix = []) {
     playSound('correct');
     fireConfetti(caught ? 70 : 30);
     if (caught) {
-      document.getElementById('catch-stamp').className = 'catch-stamp show' + (isNew ? ' new' : '');
+      const stamp = document.getElementById('catch-stamp');
+      stamp.className = 'catch-stamp show' + (isNew ? ' new' : '');
+      // 도장을 누르면 도감으로 가서 방금 잡은 친구를 보여줌
+      stamp.onclick = () => openCollection({ fromGame: true, highlight: correctOpt.name });
     }
   }, 280);
 
